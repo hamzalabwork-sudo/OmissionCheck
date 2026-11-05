@@ -1,0 +1,14 @@
+{
+ "backend": "ethpos",
+ "chain_id": 32382,
+ "contract": "0xa49bB9bC7c8eA0b6fc5a777d0E76ab4746893841",
+ "mode": "accumulate",
+ "m": 192,
+ "banks": 16,
+ "omit_k": 5,
+ "fab_k": 2,
+ "seed": 1,
+ "mainnet_gas_gwei": 5.0,
+ "eth_usd": 3000.0,
+ "client": "Geth/v1.13.15-stable-c5ba367e/linux-amd64/go1.21.9"
+}

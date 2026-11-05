@@ -1,0 +1,28 @@
+# secrets and local environment
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# datasets (download with scripts/get_data.py) and derived data
+data/
+
+# local blockchain networks: generated keys and chain state
+infra/besu_network/
+infra/ethpos_network/
+infra/poa2_network/
+
+# trained models and logs from GPU runs
+results/paper2/aml/models/
+logs/
+
+# manuscript sources stay outside this repository
+paper2/*.tex
+paper2/*.pdf
+
+# LaTeX build artefacts
+*.aux
+*.log
+*.out
+*.fls
+*.fdb_latexmk

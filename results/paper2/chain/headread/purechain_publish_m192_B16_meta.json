@@ -1,0 +1,14 @@
+{
+ "backend": "purechain",
+ "chain_id": 900520900520,
+ "contract": "0x7c977337a9a4399a82BaeADa038081147f99e81F",
+ "mode": "publish",
+ "m": 192,
+ "banks": 16,
+ "omit_k": 5,
+ "fab_k": 2,
+ "seed": 1,
+ "mainnet_gas_gwei": 5.0,
+ "eth_usd": 3000.0,
+ "client": "PureChain/PureChain-Idle-Hub/v1.13.15-purechain-1.0.1-e797061c-20261013/linux-amd64/go1.21.12"
+}
