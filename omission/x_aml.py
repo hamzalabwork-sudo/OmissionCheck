@@ -1,8 +1,9 @@
-"""X8-X10: omission as an evasion attack on AML transaction monitoring, and recovery through the protocol.
+"""X8-X11: omission as an evasion attack on AML transaction monitoring, and recovery through the protocol.
 
   train   train a monitor (Multi-GIN+EU or Multi-PNA+EU; standard, DropEdge or omission-aware adversarial training)
   attack  insiders delete laundering records in the test period; score the books as they stand, after the protocol
           has put back the records it decoded, and with the decoded omissions raised as alerts
+  spill   whether deletion also hides the laundering that stays in the books (clean vs attacked monitor)
   stream  continuous verification: per-epoch latency of decode, restoration and re-scoring
 
 The protocol is run on the actual books of every affected epoch (consortium of the 1,000 busiest banks, m = 192).
@@ -204,6 +205,50 @@ def cmd_attack(a):
     pd.DataFrame(rows).to_csv(OUT / f"x8_{_name(a.setting, a.model, a.variant, a.seed)}.csv", index=False)
 
 
+def cmd_spill(a):
+    """X11: does deleting laundering records also hide the laundering that stays in the books? Laundering transfers
+    with no deleted record are scored by the monitor on the clean and on the attacked books; neighbours share an
+    account with a deleted transfer, so their graph context changed most. Legitimate transfers give the false-alarm
+    rate. The deletions are those of cmd_attack (same scenarios, same seed)."""
+    dev = _device(a.gpu)
+    e = aml.edges()
+    y = e.y.to_numpy()
+    part = aml.split(e.t.to_numpy())
+    rec = aml.all_records()
+    test_tx = np.flatnonzero(part == 2)
+    test_rec = rec.take(part[rec.tx] == 2)
+    model = load(a.setting, a.model, a.variant, a.seed, dev)
+    rng = np.random.default_rng(a.seed)
+    t0 = time.time()
+    clean = aml.score(model, aml.build(rec, a.setting, test_tx), dev)
+    pc = clean.reindex(test_tx).fillna(0.0)
+    src, dst = e.src.to_numpy(), e.dst.to_numpy()
+    laund, legit = test_tx[y[test_tx] == 1], test_tx[y[test_tx] == 0]
+    rows = []
+    for name, bad, deleted in scenarios(test_rec, y, clean, rng):
+        if not len(deleted):
+            continue
+        del_tx = np.unique(deleted.tx)
+        pa = aml.score(model, aml.build(rec.minus(deleted), a.setting, test_tx), dev).reindex(test_tx).fillna(0.0)
+        acc = np.union1d(src[del_tx], dst[del_tx])
+        kept = laund[~np.isin(laund, del_tx)]
+        near = kept[np.isin(src[kept], acc) | np.isin(dst[kept], acc)]
+        for subset, ids in (("kept laundering", kept), ("neighbour laundering", near), ("legitimate", legit)):
+            c, q = pc[ids].to_numpy(), pa[ids].to_numpy()
+            rows.append(dict(setting=a.setting, model=a.model, variant=a.variant, seed=a.seed, scenario=name,
+                             subset=subset, n=len(ids), flagged_clean=float((c > 0.5).mean()) if len(ids) else np.nan,
+                             flagged_attacked=float((q > 0.5).mean()) if len(ids) else np.nan,
+                             lost=int(((c > 0.5) & (q <= 0.5)).sum()), gained=int(((c <= 0.5) & (q > 0.5)).sum()),
+                             score_clean=float(c.mean()) if len(ids) else np.nan,
+                             score_attacked=float(q.mean()) if len(ids) else np.nan))
+        k, nb = rows[-3], rows[-2]
+        print(f"[{_name(a.setting, a.model, a.variant, a.seed)}] {name}: kept laundering recall "
+              f"{k['flagged_clean']:.3f} -> {k['flagged_attacked']:.3f}; neighbours ({nb['n']}) "
+              f"{nb['flagged_clean']:.3f} -> {nb['flagged_attacked']:.3f} ({time.time() - t0:.0f}s)", flush=True)
+    OUT.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(rows).to_csv(OUT / f"x11_spill_{_name(a.setting, a.model, a.variant, a.seed)}.csv", index=False)
+
+
 def cmd_stream(a):
     """Continuous verification under insiders at the five banks with the most laundering records: every sampled
     test epoch is closed, its masked sketches built and summed, the aggregate decoded, the decoded records put back,
@@ -278,7 +323,7 @@ def cmd_stream(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("cmd", choices=["train", "attack", "stream"])
+    ap.add_argument("cmd", choices=["train", "attack", "spill", "stream"])
     ap.add_argument("--every", type=int, default=6, help="stream: score every n-th test epoch")
     ap.add_argument("--setting", default="views", choices=["global", "views"])
     ap.add_argument("--model", default="gin", choices=["gin", "pna"])
@@ -287,7 +332,7 @@ def main():
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--gpu", type=int, default=0)
     a = ap.parse_args()
-    {"train": cmd_train, "attack": cmd_attack, "stream": cmd_stream}[a.cmd](a)
+    {"train": cmd_train, "attack": cmd_attack, "spill": cmd_spill, "stream": cmd_stream}[a.cmd](a)
 
 
 if __name__ == "__main__":

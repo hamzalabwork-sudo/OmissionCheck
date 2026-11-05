@@ -357,6 +357,46 @@ def t_aml():
         *rows, r"\bottomrule\end{tabular}\end{table}"]))
 
 
+def t_spill():
+    """X11: does deletion also hide the laundering that stays in the books?"""
+    files = sorted((RES / "aml").glob("x11_spill_*.csv"))
+    if not files:
+        return
+    d = pd.concat(map(pd.read_csv, files), ignore_index=True)
+    d = d[d.n > 0]
+    laund = d[d.subset != "legitimate"]
+    M("AmlSpillSeeds", d.groupby("setting").seed.nunique().min())
+    M("AmlSpillMaxChange", f"{100 * (laund.flagged_attacked - laund.flagged_clean).abs().max():.1f}")
+    rows = []
+    for st, label in AML_SETTING.items():
+        P = "Pooled" if st == "global" else "Views"
+        s = d[d.setting == st]
+        if s.empty:
+            continue
+        rows.append(f"\\multicolumn{{6}}{{l}}{{\\emph{{{label}}}}} \\\\")
+        for sc in ("insider k=5", "insider k=10", "insider k=20", "aware k=5 b=0.5", "random k=5 b=0.5"):
+            g = s[s.scenario == sc]
+            k, nb = g[g.subset == "kept laundering"], g[g.subset == "neighbour laundering"]
+            rows.append(f"{_aml_label(sc)} & {_ms(k.flagged_clean)} & {_ms(k.flagged_attacked)} & "
+                        f"{num(nb.n.mean())} & {_ms(nb.flagged_clean)} & {_ms(nb.flagged_attacked)} \\\\")
+        g = s[s.scenario == "insider k=20"]
+        for sub, key in (("kept laundering", "Kept"), ("neighbour laundering", "Near"), ("legitimate", "Legit")):
+            h = g[g.subset == sub]
+            M(f"Aml{P}Spill{key}Clean", _ms(h.flagged_clean, 1 if key != "Legit" else 2))
+            M(f"Aml{P}Spill{key}Attacked", _ms(h.flagged_attacked, 1 if key != "Legit" else 2))
+        M(f"Aml{P}SpillNearN", num(g[g.subset == "neighbour laundering"].n.mean()))
+    _tex("t_spill", "\n".join([
+        r"\begin{table}[!htbp]\centering\small",
+        r"\caption{Does deletion also hide the laundering that stays in the books? Recall (\%, mean over "
+        f"{MACROS['AmlSpillSeeds']} seeds) of laundering transfers with no deleted record, scored by the monitor on the "
+        r"clean and on the attacked books; neighbours share an account with a deleted transfer.}\label{tab:spill}",
+        r"\begin{tabular}{lrrrrr}\toprule",
+        r" & \multicolumn{2}{c}{Kept laundering} & \multicolumn{3}{c}{Neighbours of deleted transfers} \\"
+        r"\cmidrule(lr){2-3}\cmidrule(lr){4-6}",
+        r"Attack & Clean & Attacked & $n$ & Clean & Attacked \\\midrule",
+        *rows, r"\bottomrule\end{tabular}\end{table}"]))
+
+
 def t_stream():
     files = sorted((RES / "aml").glob("x10_stream_*.csv"))
     if not files:
@@ -394,7 +434,7 @@ def main():
     GEN.mkdir(parents=True, exist_ok=True)
     FIG.mkdir(parents=True, exist_ok=True)
     plt.rcParams.update({"font.size": 9, "axes.spines.top": False, "axes.spines.right": False})
-    for f in (t_coverage, t_detection, f_sizing, f_collusion, t_chain, t_bench, t_aml, t_stream):
+    for f in (t_coverage, t_detection, f_sizing, f_collusion, t_chain, t_bench, t_aml, t_spill, t_stream):
         try:
             f()
         except FileNotFoundError as e:

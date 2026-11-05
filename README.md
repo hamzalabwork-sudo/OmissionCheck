@@ -33,6 +33,7 @@ All numbers are regenerated from `results/paper2/` by `python -m omission.report
 | Collusion | coalitions of ten banks could hide 4.5 % of covered laundering legs |
 | Ledgers | Hyperledger Besu QBFT, Clique, Ethereum proof-of-stake devnet, live PureChain: 120 of 120 on-chain epochs decoded exactly |
 | AML evasion | 20 insider banks cut the PR-AUC of a pooled Multi-GNN monitor by 47 %; DropEdge and omission-aware adversarial training did not reduce the loss |
+| Where the loss lies | laundering left in the books was flagged as often after deletion as before (62.5 % vs 62.7 %), as were its neighbours (83.1 % vs 83.4 %): the whole loss is the deleted records |
 | Recovery | 73.4 % of deleted records recovered with the correct witness, none wrongly |
 
 ---
@@ -47,7 +48,8 @@ omission/                 the protocol and all experiments
   run.py                  X1 coverage, X2 detection and localisation, X3 sketch sizing, X4 collusion
   bench.py                X7 per-bank computation micro-benchmarks
   chain.py                X6 end-to-end runs of the OmissionOracle contract on four ledgers
-  aml.py, x_aml.py        X8-X10 Multi-GNN monitor: training, insider attacks, protocol recovery, continuous verification
+  aml.py, x_aml.py        X8-X11 Multi-GNN monitor: training, insider attacks, protocol recovery, spill-over of
+                          deletion onto the laundering left in the books, continuous verification
   report.py               tables, figures and LaTeX macros -> paper2/generated, paper2/figures
   queue.sh, pipeline.sh,  job queue, retrying pipeline and memory watchdog used on a shared GPU server
   watchdog.sh
@@ -110,6 +112,7 @@ git clone https://github.com/IBM/Multi-GNN && export MULTIGNN=$PWD/Multi-GNN   #
 pip install -r requirements-ml.txt
 python -m omission.x_aml train  --setting views  --model gin --variant standard --seed 0 --gpu 0 --epochs 50
 python -m omission.x_aml attack --setting views  --model gin --variant standard --seed 0 --gpu 0
+python -m omission.x_aml spill  --setting views  --model gin --variant standard --seed 0 --gpu 0
 python -m omission.x_aml stream --setting views  --model gin --variant standard --seed 0 --gpu 0 --every 1
 #   settings: global (pooled monitor), views (per-bank monitors); variants: standard, dropedge, omission
 ```
