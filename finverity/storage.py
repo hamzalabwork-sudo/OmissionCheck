@@ -28,7 +28,8 @@ class EvidenceStore:
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS packages(
                 record_id BLOB PRIMARY KEY, tx_id TEXT NOT NULL, level INTEGER NOT NULL,
-                package BLOB NOT NULL, evidence_hash BLOB NOT NULL, approver_index INTEGER NOT NULL);
+                package BLOB NOT NULL, evidence_hash BLOB NOT NULL, approver_index INTEGER NOT NULL,
+                meta_hash BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS proofs(
                 record_id BLOB PRIMARY KEY, batch_id BLOB NOT NULL, proof BLOB NOT NULL);
             CREATE TABLE IF NOT EXISTS documents(
@@ -49,8 +50,8 @@ class EvidenceStore:
     def put(self, record_id: bytes, b: EvidenceBundle) -> None:
         con = self._con()
         with con:
-            con.execute("INSERT OR REPLACE INTO packages VALUES(?,?,?,?,?,?)",
-                        (record_id, b.tx_id, b.level, b.canonical, b.evidence_hash, b.approver_index))
+            con.execute("INSERT OR REPLACE INTO packages VALUES(?,?,?,?,?,?,?)",
+                        (record_id, b.tx_id, b.level, b.canonical, b.evidence_hash, b.approver_index, b.meta_hash))
             con.executemany("INSERT OR REPLACE INTO documents VALUES(?,?,?)",
                             [(record_id, d, c) for d, c in b.documents.items()])
 
@@ -65,6 +66,9 @@ class EvidenceStore:
         if row is None:
             return None
         return row[0], [row[1][i:i + 32] for i in range(0, len(row[1]), 32)]
+
+    def get_meta(self, record_id: bytes) -> bytes:
+        return self._con().execute("SELECT meta_hash FROM packages WHERE record_id=?", (record_id,)).fetchone()[0]
 
     def get(self, record_id: bytes) -> tuple[dict, dict[str, bytes]]:
         con = self._con()

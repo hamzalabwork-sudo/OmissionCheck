@@ -7,11 +7,13 @@
   stream  continuous verification: per-epoch latency of decode, restoration and re-scoring
 
 The protocol is run on the actual books of every affected epoch (consortium of the 1,000 busiest banks, m = 192).
-Masks are left out here because they cancel exactly in the aggregate (X2 checks this in every honest epoch).
+Masks are left out here because they cancel exactly in the aggregate (X2 checks this in every honest epoch);
+each epoch draws its own seed (protocol.epoch_seed), as on the ledger.
 """
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import time
 
@@ -27,6 +29,7 @@ from . import aml, data, protocol as P
 OUT = RESULTS / "paper2" / "aml"
 N_MEMBERS = 1000
 M_CELLS = 192
+ATTACK = "x8b"      # attack results under the protocol (x8: the naive design)
 
 
 def _name(setting, kind, variant, seed):
@@ -81,6 +84,8 @@ class Consortium:
         self.books = P.honest_books(self.sel, self.keys)
         self.sel = self.sel[["payer", "payee"]]                # the canonical strings are no longer needed
         self.epoch = t["epoch"].to_numpy()
+        del t
+        data.transfers.cache_clear()                           # keep the shared server's memory low
         # key -> covered row through a sorted array of one 64-bit MAC word (no Python objects per key, which
         # data-loader workers would copy); the full key is compared after the lookup
         self._word = np.ascontiguousarray(self.keys[:, 1])
@@ -143,24 +148,115 @@ def scenarios(test_rec: aml.Records, y: np.ndarray, clean: pd.Series, rng):
         yield f"random k=5 b={beta:g}", bad, mine.take(rng.choice(len(mine), n, replace=False))
 
 
-def metrics(p: pd.Series, test_tx, y, deleted_tx, corrupt_tx, alerts=None) -> dict:
-    s = p.reindex(test_tx).fillna(0.0).to_numpy()
-    flag = s > 0.5
-    if alerts is not None:
-        flag |= np.isin(test_tx, alerts)
+BOOT = 200          # paired Poisson bootstrap replicates over the test transfers
+BOOT_SEED = 20261106
+
+
+def _flags(p: pd.Series, test_tx, alerts=None, model=True):
+    s = p.reindex(test_tx).fillna(0.0).to_numpy() if model else np.zeros(len(test_tx))
+    a = np.isin(test_tx, alerts) if alerts is not None else np.zeros(len(test_tx), bool)
+    return np.maximum(s, a), (s > 0.5) | a
+
+
+def val_threshold(model, kind, setting, variant, seed, device) -> float:
+    """Decision threshold that maximises F1 on the validation period (clean books, the graph used for model
+    selection), applied unchanged to the test period. Cached next to the model."""
+    f = OUT / "models" / f"{_name(setting, kind, variant, seed)}_thr.json"
+    if f.exists():
+        return json.loads(f.read_text())["tau"]
+    e = aml.edges()
+    part = aml.split(e.t.to_numpy())
+    rec = aml.all_records()
+    va_tx = np.flatnonzero(part == 1)
+    sv = aml.score(model, aml.build(rec.take(part[rec.tx] <= 1), setting, va_tx), device)
+    yv = e.y.to_numpy()[sv.index.to_numpy()] == 1
+    s = sv.to_numpy()
+    order = np.argsort(-s, kind="stable")
+    ss, tp = s[order], np.cumsum(yv[order])
+    last = np.r_[np.flatnonzero(np.diff(ss) != 0), len(ss) - 1]      # flag every score >= threshold
+    f1 = 2 * tp[last] / (last + 1 + yv.sum())
+    i = int(np.argmax(f1))
+    tau = float(ss[last[i]])
+    f.write_text(json.dumps(dict(tau=tau, val_f1=float(f1[i]), val_f1_half=float(aml.f1_at_half(yv.astype(int), s)))))
+    return tau
+
+
+def metrics(p: pd.Series, test_tx, y, deleted_tx, corrupt_tx, alerts=None, model=True, tau=None) -> dict:
+    """Scores of the monitor (model=False: the alerts alone) on every test transfer (a transfer missing from the
+    books scores 0) and on the visible set, the test transfers the monitor's graph still contains. tau: the
+    validation-optimal threshold; f1_vt etc. flag scores >= tau instead of > 0.5."""
+    s, flag = _flags(p, test_tx, alerts, model)
     yt = y[test_tx] == 1
+    vt = {}
+    if tau is not None:
+        fv = flag if not model else (s >= tau) | (np.isin(test_tx, alerts) if alerts is not None else False)
+        tpt = (fv & yt).sum()
+        vt = dict(tau=tau, f1_vt=2 * tpt / max(1, fv.sum() + yt.sum()), precision_vt=tpt / max(1, fv.sum()),
+                  recall_vt=tpt / yt.sum())
     tp = (flag & yt).sum()
     dl = np.isin(test_tx, deleted_tx) & yt
     rest = np.isin(test_tx, corrupt_tx) & yt & ~dl
     other = yt & ~np.isin(test_tx, corrupt_tx)
+    vis = np.isin(test_tx, p.index.to_numpy()) if model else np.ones(len(test_tx), bool)
+    if alerts is not None:
+        vis |= np.isin(test_tx, alerts)
+    tpv, yv = (flag & yt & vis).sum(), (yt & vis).sum()
     return dict(f1=2 * tp / max(1, flag.sum() + yt.sum()), precision=tp / max(1, flag.sum()), recall=tp / yt.sum(),
-                pr_auc=average_precision_score(yt, s if alerts is None else np.maximum(s, np.isin(test_tx, alerts))),
+                pr_auc=average_precision_score(yt, s),
                 recall_deleted=flag[dl].mean() if dl.any() else np.nan,
                 recall_corrupt_rest=flag[rest].mean() if rest.any() else np.nan,
-                recall_elsewhere=flag[other].mean(), n_flagged=int(flag.sum()))
+                recall_elsewhere=flag[other].mean(), n_flagged=int(flag.sum()),
+                n_visible=int(vis.sum()), laundering_visible=int(yv),
+                f1_visible=2 * tpv / max(1, (flag & vis).sum() + yv), recall_visible=tpv / max(1, yv),
+                pr_auc_visible=average_precision_score(yt[vis], s[vis]) if yv else np.nan, **vt)
+
+
+class Bootstrap:
+    """Paired Poisson bootstrap: every row is resampled with the same weights as the clean row, so the interval of
+    the difference to clean accounts for the correlation between the two."""
+
+    def __init__(self, yt: np.ndarray, B: int = BOOT):
+        self.yt, self.B = yt, B
+        self.ref = None
+
+    def _w(self, b):
+        return np.random.default_rng([BOOT_SEED, b]).poisson(1.0, len(self.yt)).astype(np.float64)
+
+    def reps(self, s: np.ndarray, flag: np.ndarray) -> np.ndarray:
+        """(B, 2): weighted F1 at 0.5 and weighted average precision (step-wise, tied scores as one threshold)."""
+        order = np.argsort(-s, kind="stable")
+        ys, ss, fs = self.yt[order], s[order], flag[order]
+        last = np.r_[np.flatnonzero(np.diff(ss) != 0), len(ss) - 1]
+        out = np.empty((self.B, 2))
+        for b in range(self.B):
+            w = self._w(b)[order]
+            wp = w * ys
+            tp = (wp * fs).sum()
+            out[b, 0] = 2 * tp / max(1e-12, (w * fs).sum() + wp.sum())
+            ctp, cw = np.cumsum(wp)[last], np.cumsum(w)[last]
+            rec = ctp / max(1e-12, wp.sum())
+            out[b, 1] = np.sum(np.diff(np.r_[0.0, rec]) * ctp / np.maximum(cw, 1e-12))
+        return out
+
+    def row(self, s, flag) -> dict:
+        r = self.reps(s, flag)
+        if self.ref is None:
+            self.ref = r
+        d = r - self.ref
+        q = lambda x, a: float(np.quantile(x, a))
+        return dict(f1_lo=q(r[:, 0], .025), f1_hi=q(r[:, 0], .975), pr_auc_lo=q(r[:, 1], .025),
+                    pr_auc_hi=q(r[:, 1], .975), d_f1_lo=q(d[:, 0], .025), d_f1_hi=q(d[:, 0], .975),
+                    d_pr_auc_lo=q(d[:, 1], .025), d_pr_auc_hi=q(d[:, 1], .975))
 
 
 def cmd_attack(a):
+    """X8. Defences per scenario: none (the books as they stand); union of books (pooled monitor reading both banks'
+    books in clear; global setting only); protocol restore (decoded records put back, model only); protocol alert
+    (the decoded omissions alone); restore + alert. Each row also gives the clean-book recall of the transfers the
+    scenario deletes, and paired bootstrap intervals against the clean row.
+    Rows are saved after every scenario, so a run the memory watchdog kills resumes where it stopped.
+    --insider-only (tag x8t) runs the clean and insider scenarios only: it adds the validation-threshold columns to
+    monitors attacked before they existed."""
     dev = _device(a.gpu)
     e = aml.edges()
     y = e.y.to_numpy()
@@ -169,25 +265,47 @@ def cmd_attack(a):
     test_tx = np.flatnonzero(part == 2)
     test_rec = rec.take(part[rec.tx] == 2)
     model = load(a.setting, a.model, a.variant, a.seed, dev)
+    name_ = _name(a.setting, a.model, a.variant, a.seed)
+    out_f = OUT / f"{'x8t' if a.insider_only else ATTACK}_{name_}.csv"
+    part_f = out_f.with_suffix(".partial.csv")
+    rows = pd.read_csv(part_f).to_dict("records") if part_f.exists() else []
+    done = {r["scenario"] for r in rows}
+    tau = val_threshold(model, a.model, a.setting, a.variant, a.seed, dev)
     cons = Consortium()
     rng = np.random.default_rng(a.seed)
+    boot = Bootstrap(y[test_tx] == 1)
     t0 = time.time()
     clean = aml.score(model, aml.build(rec, a.setting, test_tx), dev)
-    rows = []
+    boot.row(*_flags(clean, test_tx))           # the clean row is the bootstrap reference, also when resuming
+
+    def add(base, defence, p, alerts=None, model_=True, **extra):
+        m = metrics(p, test_tx, y, base["_del"], base["_cor"], alerts, model_, tau)
+        out = {k: v for k, v in base.items() if not k.startswith("_")}
+        rows.append(dict(out, defence=defence, **extra, **m, **boot.row(*_flags(p, test_tx, alerts, model_))))
+        return rows[-1]
+
     for name, bad, deleted in scenarios(test_rec, y, clean, rng):
+        if name in done or (a.insider_only and name != "clean" and not name.startswith("insider")):
+            continue
         corrupt_tx = np.unique(test_rec.tx[np.isin(test_rec.bank, bad)])
         del_tx = np.unique(deleted.tx)
+        dl = del_tx[y[del_tx] == 1]
         base = dict(setting=a.setting, model=a.model, variant=a.variant, seed=a.seed, scenario=name,
                     corrupt_banks=len(bad), deleted_records=len(deleted), deleted_transfers=len(del_tx),
-                    deleted_interbank=int((e.payer.to_numpy()[del_tx] != e.payee.to_numpy()[del_tx]).sum()))
+                    deleted_interbank=int((e.payer.to_numpy()[del_tx] != e.payee.to_numpy()[del_tx]).sum()),
+                    recall_deleted_clean=float((clean.reindex(dl).fillna(0) > 0.5).mean()) if len(dl) else np.nan,
+                    _del=del_tx, _cor=corrupt_tx)
         if len(deleted):
             books = rec.minus(deleted)
             p = aml.score(model, aml.build(books, a.setting, test_tx), dev)
         else:
             books, p = rec, clean
-        rows.append(dict(base, defence="none", **metrics(p, test_tx, y, del_tx, corrupt_tx)))
+        r0 = add(base, "none", p)
         if not len(deleted):
+            pd.DataFrame(rows).to_csv(part_f, index=False)
             continue
+        if a.setting == "global":
+            add(base, "union of books", aml.score(model, aml.build(books, "union", test_tx), dev))
         restored, ep = cons.recover(deleted)
         truth = set(zip(deleted.tx.tolist(), deleted.bank.tolist()))
         got = set(zip(restored.tx.tolist(), restored.bank.tolist()))
@@ -195,14 +313,19 @@ def cmd_attack(a):
                     restored_wrong=len(got - truth), epochs=len(ep), epochs_complete=float(ep.complete.mean()),
                     decode_s_median=float(ep.seconds.median()))
         p2 = aml.score(model, aml.build(aml.Records.concat([books, restored]), a.setting, test_tx), dev)
-        rows.append(dict(base, defence="protocol restore", **prot, **metrics(p2, test_tx, y, del_tx, corrupt_tx)))
-        rows.append(dict(base, defence="protocol restore + alert", **prot,
-                         **metrics(p2, test_tx, y, del_tx, corrupt_tx, alerts=np.unique(restored.tx))))
-        print(f"[{_name(a.setting, a.model, a.variant, a.seed)}] {name}: "
-              f"F1 {rows[-3]['f1']:.3f} -> {rows[-2]['f1']:.3f} / {rows[-1]['f1']:.3f} "
-              f"({time.time() - t0:.0f}s)", flush=True)
-    OUT.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(rows).to_csv(OUT / f"x8_{_name(a.setting, a.model, a.variant, a.seed)}.csv", index=False)
+        al = np.unique(restored.tx)
+        r1 = add(base, "protocol restore", p2, **prot)
+        add(base, "protocol alert", p2, alerts=al, model_=False, **prot)
+        r2 = add(base, "protocol restore + alert", p2, alerts=al, **prot)
+        print(f"[{_name(a.setting, a.model, a.variant, a.seed)}] {name}: clean-book recall of deleted "
+              f"{base['recall_deleted_clean']:.3f}; F1 none {r0['f1']:.3f} restore {r1['f1']:.3f} "
+              f"+alert {r2['f1']:.3f} ({time.time() - t0:.0f}s)", flush=True)
+        pd.DataFrame(rows).to_csv(part_f, index=False)
+        del books, p, p2, restored
+        gc.collect()
+        torch.cuda.empty_cache()
+    pd.DataFrame(rows).to_csv(out_f, index=False)
+    part_f.unlink(missing_ok=True)
 
 
 def cmd_spill(a):
@@ -331,6 +454,7 @@ def main():
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--gpu", type=int, default=0)
+    ap.add_argument("--insider-only", action="store_true", help="attack: clean and insider scenarios only (x8t)")
     a = ap.parse_args()
     {"train": cmd_train, "attack": cmd_attack, "spill": cmd_spill, "stream": cmd_stream}[a.cmd](a)
 

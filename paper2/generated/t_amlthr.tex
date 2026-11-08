@@ -1,0 +1,10 @@
+\begin{table*}[!htbp]\centering\small\setlength{\tabcolsep}{4pt}
+\caption{F1 (\%) at the reference threshold of 0.5 and at the threshold $\tau$ that maximises F1 on the validation period (clean books), applied unchanged to the test period; standard training, insiders at 20 banks. $n$: seeds with both.}\label{tab:amlthr}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{llrrrrrrrr}\toprule
+ & & & & \multicolumn{2}{c}{Clean} & \multicolumn{2}{c}{Attacked} & \multicolumn{2}{c}{Restore} \\\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}
+Detector & Monitor & $n$ & $\tau$ & 0.5 & $\tau$ & 0.5 & $\tau$ & 0.5 & $\tau$ \\\midrule
+Multi-GIN+EU & Pooled monitor & 5 & 0.69 & 58.0\,$\pm$\,3.6 & 63.9\,$\pm$\,1.6 & 38.2\,$\pm$\,3.1 & 42.2\,$\pm$\,0.9 & 52.9\,$\pm$\,3.6 & 58.5\,$\pm$\,1.4 \\
+Multi-GIN+EU & Per-bank monitors & 5 & 0.62 & 61.6\,$\pm$\,1.6 & 64.1\,$\pm$\,2.6 & 50.9\,$\pm$\,1.7 & 52.0\,$\pm$\,1.2 & 57.7\,$\pm$\,1.8 & 59.8\,$\pm$\,2.3 \\
+Multi-PNA+EU & Pooled monitor & 3 & 0.64 & 66.2\,$\pm$\,4.4 & 69.6\,$\pm$\,2.4 & 43.3\,$\pm$\,3.2 & 45.7\,$\pm$\,0.8 & 60.4\,$\pm$\,4.3 & 63.6\,$\pm$\,2.0 \\
+Multi-PNA+EU & Per-bank monitors & 3 & 0.79 & 68.3\,$\pm$\,3.4 & 74.2\,$\pm$\,0.5 & 57.1\,$\pm$\,2.8 & 60.7\,$\pm$\,0.7 & 63.9\,$\pm$\,2.9 & 69.6\,$\pm$\,0.4 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

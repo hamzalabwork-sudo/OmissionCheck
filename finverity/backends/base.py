@@ -43,15 +43,20 @@ class Item:
     prep: dict = field(default_factory=dict)
 
 
-def approval_digest(chain_id: int, registry: str, record_id: bytes, evidence_hash: bytes,
-                    meta_hash: bytes, level: int) -> bytes:
-    """Inner struct hash signed by the approver; must mirror FinVerityRegistry.approvalDigest."""
-    return keccak(abi_encode(["uint256", "address", "bytes32", "bytes32", "bytes32", "uint8"],
-                             [chain_id, registry, record_id, evidence_hash, meta_hash, level]))
+def approval_digest(chain_id: int, registry: str, submitter: str, record_id: bytes, evidence_hash: bytes,
+                    meta_hash: bytes, level: int, count: int = 0) -> bytes:
+    """Inner struct hash signed by the approver; must mirror FinVerityRegistry.approvalDigest.
+
+    count = 0 marks a single record (kind 0, one leaf); count >= 1 a batch of that many records (kind 1)."""
+    kind, n = (1, count) if count else (0, 1)
+    return keccak(abi_encode(["uint256", "address", "address", "uint8", "bytes32", "bytes32", "bytes32", "uint8",
+                              "uint32"],
+                             [chain_id, registry, submitter, kind, record_id, evidence_hash, meta_hash, level, n]))
 
 
-def sign_approval(approver, chain_id: int, registry: str, item: Item) -> bytes:
-    inner = approval_digest(chain_id, registry, item.record_id, item.evidence_hash, item.meta_hash, item.level)
+def sign_approval(approver, chain_id: int, registry: str, item: Item, submitter: str) -> bytes:
+    inner = approval_digest(chain_id, registry, submitter, item.record_id, item.evidence_hash, item.meta_hash,
+                            item.level, len(item.members))
     return bytes(approver.sign_message(encode_defunct(primitive=inner)).signature)
 
 
@@ -102,6 +107,15 @@ class Backend(ABC):
     def block_interval(self) -> float | None:
         """Recent block interval in seconds, or None for backends without blocks."""
         return None
+
+    def head(self) -> int | None:
+        """Newest block height seen by the client, or None for backends without blocks."""
+        return None
+
+    def resend(self, item: Item, worker: int) -> None:
+        """Rebroadcast an in-flight submission unchanged (no-op where submission is synchronous)."""
+
+    tail_k: int = 0   # client-side tail: confirmations to drive after the last record (blockchains only)
 
     def extra_metrics(self, items: list[Item]) -> dict:
         return {}

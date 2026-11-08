@@ -1,21 +1,10 @@
-\begin{table}[!htbp]\centering\small
-\caption{The protocol on four ledgers: a consortium of the 16 busiest banks publishes one masked sketch per bank and epoch, with injected omissions and fabrications. Gas of the first and of later publications in an epoch (median), send-to-receipt latency, the mainnet-equivalent fee of one publication, and the share of epochs whose on-chain sum decoded to exactly the injected discrepancies.}\label{tab:chain}
-\begin{tabular}{llrrrrrrrr}\toprule
-Ledger & Mode & $m$ & Gas, first & Gas, later & Lat.\ med (s) & P95 (s) & Fee & Epochs & Exact \\\midrule
-Besu QBFT & accumulate & 192 & 8{,}818{,}802 & 2{,}235{,}344 & 1.51 & 2.00 & \$33.53 & 10 & 100\% \\
-Besu QBFT & commit & 192 & 71{,}041 & 53{,}941 & 0.99 & 1.02 & \$0.81 & 10 & 100\% \\
-Besu QBFT & commit-aggregate & 192 & 117{,}065 & 117{,}065 & 0.79 & 0.90 & \$1.76 & \multicolumn{2}{c}{one per epoch} \\
-Besu QBFT & publish & 192 & 235{,}517 & 218{,}459 & 0.99 & 1.02 & \$3.28 & 10 & 100\% \\
-Ethereum PoS devnet & accumulate & 192 & 8{,}818{,}802 & 2{,}235{,}344 & 11.95 & 12.06 & \$33.53 & 10 & 100\% \\
-Ethereum PoS devnet & commit & 192 & 71{,}041 & 53{,}941 & 11.97 & 12.08 & \$0.81 & 10 & 100\% \\
-Ethereum PoS devnet & commit-aggregate & 192 & 117{,}065 & 117{,}065 & 11.85 & 11.94 & \$1.76 & \multicolumn{2}{c}{one per epoch} \\
-Ethereum PoS devnet & publish & 192 & 235{,}517 & 218{,}459 & 11.96 & 12.05 & \$3.28 & 10 & 100\% \\
-Clique emulation & accumulate & 192 & 8{,}818{,}802 & 2{,}235{,}344 & 1.98 & 2.03 & \$33.53 & 10 & 100\% \\
-Clique emulation & commit & 192 & 71{,}041 & 53{,}941 & 1.98 & 2.08 & \$0.81 & 10 & 100\% \\
-Clique emulation & commit-aggregate & 192 & 117{,}065 & 117{,}065 & 1.81 & 2.31 & \$1.76 & \multicolumn{2}{c}{one per epoch} \\
-Clique emulation & publish & 192 & 235{,}517 & 218{,}459 & 1.97 & 2.04 & \$3.28 & 10 & 100\% \\
-PureChain (live) & accumulate & 192 & 8{,}818{,}802 & 2{,}235{,}344 & 1.98 & 2.48 & \$33.53 & 10 & 100\% \\
-PureChain (live) & commit & 192 & 71{,}041 & 53{,}941 & 1.98 & 2.12 & \$0.81 & 10 & 100\% \\
-PureChain (live) & commit-aggregate & 192 & 117{,}065 & 117{,}065 & 1.78 & 2.42 & \$1.76 & \multicolumn{2}{c}{one per epoch} \\
-PureChain (live) & publish & 192 & 235{,}517 & 218{,}459 & 1.94 & 2.52 & \$3.28 & 10 & 100\% \\
-\bottomrule\end{tabular}\end{table}
+\begin{table*}[!htbp]\centering\small
+\caption{The protocol on the ledgers: 16 banks, $m=192$, injected omissions and fabrications. Every bank sends a book commitment (56{,}259 gas) and a sketch commitment (58{,}490 gas) per epoch; the last column of gas is the reveal (accumulate: first / later in an epoch) or, in commit mode, the posted sum. Per bank: all of a bank's transactions in an epoch. Fee: per bank and epoch at mainnet-equivalent prices, publish mode repriced under EIP-7623. Latency: median from sending to receipt (s). Exact: epochs whose sum read from the ledger decoded to exactly the injected discrepancies.}\label{tab:chain}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{lrrrrrrrr}\toprule
+ & \multicolumn{2}{c}{Gas} & & \multicolumn{4}{c}{Latency (s)} & \\
+\cmidrule(lr){2-3}\cmidrule(lr){5-8}
+Mode & Reveal or sum & Per bank & Fee & Besu QBFT & Clique & PoS devnet & PureChain & Exact \\\midrule
+accumulate & 8{,}843{,}351 / 2{,}259{,}875 & 2{,}374{,}624 & \$35.62 & -- & 2.23 & -- & 2.12 & 13/13 \\
+publish & 241{,}613 & 356{,}362 & \$8.72 & 3.79 & 2.21 & 10.92 & 2.23 & 26/26 \\
+commit & 116{,}798 (sum) & 114{,}749 & \$1.72 & 3.36 & 2.13 & -- & -- & 20/20 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

@@ -1,4 +1,5 @@
-"""X7: per-bank computation with the deployed primitives (X25519, BLAKE2b, ChaCha20) on one core.
+"""X7: per-bank computation with the deployed primitives (X25519, HKDF, BLAKE2b, ChaCha20, SHA-256, Keccak) on one
+core.
 
     python -m omission.bench
 """
@@ -17,7 +18,10 @@ from Crypto.PublicKey import ECC
 
 from finverity.config import RESULTS
 
-from .iblt import WORDS, Sketch
+from eth_utils import keccak
+
+from . import protocol as P
+from .iblt import CHECK, WORDS, Sketch
 
 OUT = RESULTS / "paper2"
 
@@ -38,8 +42,19 @@ def main():
     key = bytes(32)
     canon = b"2022/09/01 00:20|3208|8000F4580|1|8000F5340|0.01|US Dollar|0.01|US Dollar|Cheque|0"
     res["tag_blake2b_s"] = _t(lambda: hashlib.blake2b(canon, key=key, digest_size=24).digest(), 200_000)
+    res["subkeys_hkdf_s"] = _t(lambda: HKDF(key, 32, b"", SHA256, num_keys=3,
+                                            context=b"omission/mac|mask|pair-id"), 20_000)
+    # cell index and check of one key under the epoch seed: keyed BLAKE2b over the 32-byte key (the deployed
+    # stand-in for iblt.cells / iblt.checksum)
+    k32 = bytes(range(32))
+    res["cell_hash_blake2b_s"] = _t(lambda: hashlib.blake2b(k32, key=key, digest_size=40).digest(), 200_000)
+    for n in (1_000, 10_000):
+        leaves = [bytes(16) + i.to_bytes(32, "big") + bytes([1]) for i in range(n)]
+        res[f"book_root_n{n}_s"] = _t(lambda: P.merkle_root(leaves), 5)
+    sk = bytes(192 * 64)
+    res["sketch_commit_keccak_m192_s"] = _t(lambda: keccak(sk), 2000)
     for m in (96, 192, 384, 768):
-        nbytes = m * 8 * (WORDS + 2)
+        nbytes = m * 8 * (1 + WORDS + CHECK)
         res[f"mask_chacha20_m{m}_s"] = _t(
             lambda: np.frombuffer(ChaCha20.new(key=key, nonce=bytes(12)).encrypt(bytes(nbytes)), np.uint64), 2000)
     for n in (1_000, 10_000, 100_000):

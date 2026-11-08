@@ -26,3 +26,7 @@ paper2/*.pdf
 *.out
 *.fls
 *.fdb_latexmk
+
+# local PureChain network: generated keys and chain state; the released binary and SAM script are downloaded
+infra/purechain_network/
+build/purechain/

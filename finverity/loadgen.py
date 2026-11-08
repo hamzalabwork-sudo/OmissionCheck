@@ -51,8 +51,15 @@ class TrialConfig:
     keep_store: bool = False
     tag: str = ""
     batch_policy: str = "fixed"   # fixed (batch_size, batch_wait_s) | adaptive (online, backpressure)
+    #                               | interval (one root every batch_wait_s, KSI/OpenTimestamps style)
+    #                               | drain (one root of everything queued per observed block)
     window: int = 16              # adaptive: maximum submissions in flight (not yet in a block)
-    kmax: int = 1000              # adaptive: largest batch
+    kmax: int = 1000              # adaptive / interval / drain: largest batch
+    resubmit_s: float = 20.0      # adaptive: rebroadcast an in-flight submission not included after this long
+    release_s: float = 120.0      # adaptive: free its window slot after this long (counted as stranded)
+    tail_k: int = 0               # client-side tail: send no-op transactions until the last record has k confirmations
+    batch_ids: str = "store"      # store: each batched record ID once on chain (rejects re-commitment) | log: IDs only
+    #                               logged in an event; the auditor detects a re-committed ID from the complete log
     observe_blocks: int = 0       # blocks to watch past the last record (0: the deepest confirmation depth)
     observe_s: float = 90.0       # longest wait for them
     idle_before_s: float = 0.0    # wait until the chain has sealed no block for this long before the first record
@@ -61,10 +68,16 @@ class TrialConfig:
     def run_id(self) -> str:
         b = f"_b{self.batch_size}w{self.batch_wait_s:g}" if self.batch_size > 1 else ""
         if self.batch_policy == "adaptive":
-            b = f"_ad{self.window}w{self.batch_wait_s:g}"
+            b = f"_ad{self.window}w{self.batch_wait_s:g}" + (f"k{self.kmax}" if self.kmax != 1000 else "")
+        elif self.batch_policy == "interval":
+            b = f"_iv{self.batch_wait_s:g}"
+        elif self.batch_policy == "drain":
+            b = "_drain"
         a = f"_{self.arrival}" if self.arrival != "poisson" else ""
         return (f"{self.workload}_{self.backend}_{self.source}_n{self.n}_L{self.level}_d{self.doc_bytes}"
-                f"_r{self.rate:g}{b}{a}_s{self.seed}_t{self.trial}{('_' + self.tag) if self.tag else ''}")
+                f"_r{self.rate:g}{b}{'_idlog' if self.batch_ids == 'log' else ''}{a}"
+                f"{f'_tail{self.tail_k}' if self.tail_k else ''}_s{self.seed}_t{self.trial}"
+                f"{('_' + self.tag) if self.tag else ''}")
 
 
 def _pct(xs, q):
@@ -133,7 +146,12 @@ def commitment_checker(backend: Backend, store: EvidenceStore):
             return (rec is not None and rec["evidence_hash"] == h), rec
         batch_id, proof = pr
         rec = backend.fetch_batch(batch_id)
-        return (rec is not None and merkle.verify(merkle.leaf(record_id, h), proof, rec["merkle_root"])), rec
+        meta = store.get_meta(record_id)
+        # the registry must list the record ID under this batch (an ID is committed at most once)
+        listed = (backend.committed_in(record_id) == batch_id
+                  if hasattr(backend, "committed_in") and getattr(backend, "batch_ids", "store") == "store" else True)
+        ok = (rec is not None and listed and merkle.verify(merkle.leaf(record_id, h, meta), proof, rec["merkle_root"]))
+        return ok, rec
     return check
 
 
@@ -141,7 +159,7 @@ def _make_batch(cfg: TrialConfig, salt: str, store: EvidenceStore, members: list
                 approver_index: int) -> Item:
     """One Merkle-batch submission over `members`; inclusion proofs go to the off-chain store."""
     t0 = time.perf_counter()
-    root, proofs = merkle.build([merkle.leaf(m.record_id, m.evidence_hash) for m in members])
+    root, proofs = merkle.build([merkle.leaf(m.record_id, m.evidence_hash, m.meta_hash) for m in members])
     batch_id = sha256(f"{cfg.run_id}|{salt}|batch|{j}".encode())
     if store is not None:   # None: gas-calibration probe, never submitted
         store.put_proofs([(m.record_id, batch_id, pr) for m, pr in zip(members, proofs)])
@@ -156,30 +174,40 @@ def _make_batch(cfg: TrialConfig, salt: str, store: EvidenceStore, members: list
 
 def _dispatch_adaptive(cfg: TrialConfig, backend: Backend, items: list[Item], sched: np.ndarray, rs, store,
                        salt: str, t_start: float) -> tuple[list[Item], list[dict]]:
-    """Online backpressure batching.
+    """Online submission policies (records are queued in arrival order and released FIFO).
 
-    At most `window` submissions may be in flight (sent, not yet seen in a block). A record is submitted on its
-    own while the window has room and the arrival rate is low. When the target batch size
-    k* = ceil(lambda * tau / window) exceeds one, or the window is full, arrivals queue and the next free slot
-    carries all of them (up to kmax) under one Merkle root. Because a batch costs the same gas whatever its
-    size, the number of on-chain transactions stays bounded while the record rate follows the arrivals.
+    adaptive (backpressure): at most `window` submissions may be in flight (sent, not yet seen in a block). A record
+        is submitted on its own while the window has room and the arrival rate is low. When the target batch size
+        k* = ceil(lambda * tau / window) exceeds one, or the window is full, arrivals queue and the next free slot
+        carries all of them (up to kmax) under one Merkle root. A submission that is not included within resubmit_s
+        is rebroadcast unchanged (same nonce: an evicted transaction is re-admitted); after release_s its slot is
+        freed and it is left to the final receipt check.
+    interval: one submission of everything queued every batch_wait_s (per-round aggregation, as KSI and
+        OpenTimestamps calendars do), regardless of inclusion feedback.
+    drain: one submission of everything queued per newly observed block (or at once when nothing is in flight).
     """
     from collections import deque
     import math
     import queue as _q
 
+    policy = cfg.batch_policy
     sendq = [_q.Queue() for _ in range(cfg.workers)]
 
     def sender(w: int):
         while (u := sendq[w].get()) is not None:
-            backend.send(u, w)
+            if getattr(u, "_resend", False):
+                u._resend = False
+                backend.resend(u, w)
+            else:
+                backend.send(u, w)
 
     threads = [threading.Thread(target=sender, args=(w,), daemon=True) for w in range(cfg.workers)]
     for th in threads:
         th.start()
     units, ctl, flight = [], [], []
     q, recent, nxt, j = deque(), deque(), 0, 0
-    last_log = 0.0
+    last_log, next_tick, last_head = 0.0, t_start + cfg.batch_wait_s, backend.head()
+    resent = released = 0
     while nxt < len(items) or q:
         now = time.perf_counter()
         while nxt < len(items) and t_start + sched[nxt] <= now:
@@ -191,9 +219,32 @@ def _dispatch_adaptive(cfg: TrialConfig, backend: Backend, items: list[Item], sc
         lam = len(recent) / 2.0
         tau = backend.block_interval()           # None: no blocks (database), records go out one by one
         flight = [u for u in flight if not backend.is_included(u)]
+        if policy == "adaptive":                 # stranded submissions: rebroadcast, then free the slot
+            for u in list(flight):
+                age = now - u.t_send if u.t_send else 0.0
+                if age > cfg.release_s:
+                    flight.remove(u)
+                    released += 1
+                elif age > cfg.resubmit_s * (1 + getattr(u, "_resends", 0)):
+                    u._resends = getattr(u, "_resends", 0) + 1
+                    u._resend = True
+                    sendq[u.submitter_index].put(u)
+                    resent += 1
         k_star = 1 if tau is None else min(cfg.kmax, max(1, math.ceil(lam * tau / cfg.window)))
-        due = q and (len(q) >= k_star or now - (t_start + sched[q[0].idx]) >= cfg.batch_wait_s or nxt >= len(items))
-        if due and len(flight) < cfg.window:
+        if policy == "interval":
+            due, gate = q and now >= next_tick, True
+        elif policy == "drain":
+            head = backend.head()
+            due, gate = q and (head is None or head > last_head or not flight), True
+        else:
+            due = q and (len(q) >= k_star or now - (t_start + sched[q[0].idx]) >= cfg.batch_wait_s or nxt >= len(items))
+            gate = len(flight) < cfg.window
+        if policy == "interval" and now >= next_tick:
+            while next_tick <= now:
+                next_tick += cfg.batch_wait_s
+        if due and gate:
+            if policy == "drain":
+                last_head = backend.head()
             take = [q.popleft() for _ in range(min(len(q), cfg.kmax))]
             u = take[0] if len(take) == 1 else _make_batch(cfg, salt, store, take, j, 0)
             u.submitter_index = j % cfg.workers
@@ -207,7 +258,7 @@ def _dispatch_adaptive(cfg: TrialConfig, backend: Backend, items: list[Item], sc
         if now - last_log >= 0.5:
             last_log = now
             ctl.append({"t": now - t_start, "queue": len(q), "in_flight": len(flight), "lambda": lam, "tau": tau,
-                        "k_star": k_star, "submissions": j})
+                        "k_star": k_star, "submissions": j, "resent": resent, "released": released})
         time.sleep(0.005)
     for w in range(cfg.workers):
         sendq[w].put(None)
@@ -221,10 +272,11 @@ def run_trial(cfg: TrialConfig, backend: Backend, log=print) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     rs = accounts.roles(n_submitters=cfg.workers)
     approver_addrs = [a.address for a in rs.approvers]
-    adaptive = cfg.batch_policy == "adaptive"
+    adaptive = cfg.batch_policy in ("adaptive", "interval", "drain")   # submissions formed online
     batching = cfg.batch_size > 1 and not adaptive
 
     log(f"[{cfg.run_id}] setup")
+    backend.batch_ids = cfg.batch_ids      # before any calldata (gas calibration included) is built
     setup_info = backend.setup(rs.submitters, rs.approvers)
 
     # ---------------------------------------------------------- preparation (client side)
@@ -298,6 +350,7 @@ def run_trial(cfg: TrialConfig, backend: Backend, log=print) -> dict:
     mon = ResourceMonitor(backend.containers)
     backend.start(cfg.workers)
     backend.observe_blocks, backend.observe_s = cfg.observe_blocks, cfg.observe_s
+    backend.tail_k = cfg.tail_k
     if cfg.idle_before_s:
         log(f"[{cfg.run_id}] idle for {backend.await_idle(cfg.idle_before_s):.0f}s before the first record")
     time.sleep(0.3)

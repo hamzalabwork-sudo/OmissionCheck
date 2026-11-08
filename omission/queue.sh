@@ -15,8 +15,10 @@ for job in "$@"; do
   args=(--setting "$setting" --model "$model" --variant "$variant" --seed "$seed" --gpu "$gpu")
   if [ "$phase" = train ] && [ ! -f "results/paper2/aml/models/${name}.pt" ]; then
     flock -n "logs/${name}.lock" nice -n 5 python -W ignore -m omission.x_aml train "${args[@]}" --epochs "$epochs"       >> "logs/${name}.out" 2>&1
-  elif [ "$phase" = attack ] && [ -f "results/paper2/aml/models/${name}.pt" ] && [ ! -f "results/paper2/aml/x8_${name}.csv" ]; then
+  elif [ "$phase" = attack ] && [ -f "results/paper2/aml/models/${name}.pt" ] && [ ! -f "results/paper2/aml/x8b_${name}.csv" ]; then
     flock -n "logs/${name}.lock" nice -n 5 python -W ignore -m omission.x_aml attack "${args[@]}"       >> "logs/${name}.out" 2>&1
+  elif [ "$phase" = thr ] && [ -f "results/paper2/aml/models/${name}.pt" ] && [ ! -f "results/paper2/aml/x8t_${name}.csv" ]; then
+    flock -n "logs/${name}.lock" nice -n 5 python -W ignore -m omission.x_aml attack "${args[@]}" --insider-only       >> "logs/${name}.out" 2>&1
   fi
 done
 echo "$(date '+%F %T') $phase queue on GPU $gpu done" >> logs/queues.out

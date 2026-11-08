@@ -1,0 +1,26 @@
+[
+ {
+  "backend": "poa2_local",
+  "build": "n64",
+  "n_public": 21,
+  "deploy_gas": 1070053,
+  "valid_check_tx_gas": 407917,
+  "valid_verify_exec_gas": 350053,
+  "valid_accepted": 1,
+  "tampered_check_tx_gas": 358717,
+  "tampered_verify_exec_gas": 332953,
+  "tampered_accepted": 0
+ },
+ {
+  "backend": "poa2_local",
+  "build": "n256",
+  "n_public": 21,
+  "deploy_gas": 1069705,
+  "valid_check_tx_gas": 407905,
+  "valid_verify_exec_gas": 350053,
+  "valid_accepted": 1,
+  "tampered_check_tx_gas": 358705,
+  "tampered_verify_exec_gas": 332953,
+  "tampered_accepted": 0
+ }
+]

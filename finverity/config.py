@@ -69,6 +69,13 @@ POA2_LOCAL = ChainConfig(
     gas_price=1,
 )
 
+# Local PureChain: the released PureChain client (v1.0.1) with its Smart Auto-Mining sealing (infra/purechain_local.py)
+PURECHAIN_LOCAL = ChainConfig(
+    name="purechain_local",
+    rpc_url=os.environ.get("PURECHAIN_LOCAL_RPC", "http://127.0.0.1:8566"),
+    chain_id=int(os.environ.get("PURECHAIN_LOCAL_CHAIN_ID", "900522")),
+)
+
 # Conventional public-chain configuration: Ethereum PoS devnet with mainnet timing.
 # gas_price = -1 means "use eth_gasPrice from the node" (EIP-1559 base fee applies).
 ETHPOS = ChainConfig(

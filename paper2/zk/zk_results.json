@@ -1,0 +1,94 @@
+{
+ "m": 192,
+ "kappa": 16,
+ "per_entry": 1414.0,
+ "entry_parts": {
+  "leaves": 264.0,
+  "key bits": 248.0,
+  "weights": 4.0,
+  "merkle": 100.0,
+  "cell commitment": 0.0,
+  "challenges": 0.0,
+  "entry hash": 243.0,
+  "hash bits": 254.0,
+  "alias check": 262.0,
+  "positions": 35.0,
+  "contribution": 4.0,
+  "masks": 0.0,
+  "evaluation": 0.0
+ },
+ "fixed_no_mask": 25242,
+ "mask_per_slot": 22275.0,
+ "totals": {
+  "64_0": 115638,
+  "64_16": 472038,
+  "256_0": 387126,
+  "256_16": 743526,
+  "1024_0": 1473078,
+  "1024_16": 1829478,
+  "4096_0": 5816886,
+  "4096_16": 6173286,
+  "16384_0": 23192118,
+  "16384_16": 23548518
+ },
+ "checked": [
+  {
+   "n": 64,
+   "checked": true,
+   "check_s": 5.608207199955359,
+   "public_inputs": 21
+  },
+  {
+   "n": 256,
+   "checked": true,
+   "check_s": 6.038685299921781,
+   "public_inputs": 21
+  },
+  {
+   "n": 1024,
+   "checked": true,
+   "check_s": 7.707750000059605,
+   "public_inputs": 21
+  }
+ ],
+ "entries_per_bank_epoch": {
+  "median": 18.0,
+  "p99": 196.0,
+  "p999": 717.0,
+  "max": 6676,
+  "bank_epochs": 236795
+ },
+ "share_within": {
+  "64": 0.9020883042293968,
+  "256": 0.9940834899385544,
+  "1024": 0.9992694102493718,
+  "4096": 0.9999957769378577,
+  "16384": 1.0
+ },
+ "top_pad": 16384,
+ "soundness_log2": -246.00423431773407,
+ "gas": {
+  "5": {
+   "backend": "poa2_local",
+   "n_public": 5,
+   "deploy_gas": 607513,
+   "check_tx_gas": 269499,
+   "verify_exec_gas": 219063,
+   "check_calldata_bytes": 420,
+   "post_tx_gas": 29266,
+   "post_calldata_bytes": 292,
+   "pairing_returned": 0
+  },
+  "21": {
+   "backend": "poa2_local",
+   "n_public": 21,
+   "deploy_gas": 1070137,
+   "check_tx_gas": 388737,
+   "verify_exec_gas": 330153,
+   "check_calldata_bytes": 932,
+   "post_tx_gas": 29266,
+   "post_calldata_bytes": 292,
+   "pairing_returned": 0
+  }
+ }
+}

@@ -116,7 +116,75 @@ def _b_unicode_nfd(p, d, rng, ctx):
     p["context"]["entity"] = unicodedata.normalize("NFD", p["context"]["entity"]); return p, d
 
 
-BENIGN = {"reserialize_reorder": _b_reserialize, "unicode_nfd": _b_unicode_nfd}
+def _b_ascii_escapes(p, d, rng, ctx):
+    # the same text with every non-ASCII character written as a \uXXXX escape, parsed back as I-JSON
+    from .canonical import parse
+    return parse(json.dumps(p, ensure_ascii=True)), d
+
+def _b_nested_reorder(p, d, rng, ctx):
+    # member order changed at every nesting level (JSON objects are unordered)
+    def shuffle(o):
+        if isinstance(o, dict):
+            ks = list(o)
+            rng.shuffle(ks)
+            return {k: shuffle(o[k]) for k in ks}
+        if isinstance(o, list):
+            return [shuffle(x) for x in o]
+        return o
+    return shuffle(p), d
+
+def _b_compact(p, d, rng, ctx):
+    # minimal separators and no indentation, parsed back as I-JSON
+    from .canonical import parse
+    return parse(json.dumps(p, separators=(",", ":"), ensure_ascii=False)), d
+
+
+BENIGN = {"reserialize_reorder": _b_reserialize, "unicode_nfd": _b_unicode_nfd, "ascii_escapes": _b_ascii_escapes,
+          "nested_reorder": _b_nested_reorder, "compact": _b_compact}
+
+
+# Non-canonical inputs: rejected at entry (never hashed), so they can neither collide nor raise false alarms.
+def _r_duplicate_key(p):
+    s = json.dumps(p)
+    return s[:-1] + ', "metadata": {}}'
+
+def _r_float_amount(p):
+    q = copy.deepcopy(p)
+    q["metadata"]["amount"] = float(q["metadata"]["amount"])
+    return q
+
+def _r_nan(p):
+    return json.dumps(p)[:-1] + ', "x": NaN}'
+
+def _r_lone_surrogate(p):
+    return json.dumps(p)[:-1] + ', "x": "\\ud800"}'
+
+def _r_big_int(p):
+    q = copy.deepcopy(p)
+    q["metadata"]["seq_big"] = 2**60
+    return q
+
+
+REJECT = {"duplicate_key": _r_duplicate_key, "float_amount": _r_float_amount, "nan_literal": _r_nan,
+          "lone_surrogate": _r_lone_surrogate, "unsafe_integer": _r_big_int}
+
+
+def input_rejection(store, record_ids: list[bytes]) -> list[dict]:
+    """Every non-canonical input variant must be rejected by parse/canonicalize (never hashed)."""
+    from .canonical import CanonicalizationError, canonicalize, parse
+    rows = []
+    for rid in record_ids:
+        pkg, _ = store.get(rid)
+        for name, make in REJECT.items():
+            v = make(copy.deepcopy(pkg))
+            try:
+                canonicalize(parse(v) if isinstance(v, str) else v)
+                rejected = False
+            except (CanonicalizationError, ValueError):
+                rejected = True
+            rows.append({"record_id": rid.hex(), "modification": name, "kind": "rejected", "detected": rejected,
+                         "correct": rejected, "verify_s": 0.0})
+    return rows
 
 
 def run_tamper(check, store, record_ids: list[bytes], approvers: list[str], seed: int) -> list[dict]:

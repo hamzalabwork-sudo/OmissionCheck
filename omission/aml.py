@@ -10,6 +10,8 @@ Records: one per (transfer, witness bank); a transfer between two banks has two,
           witness the insider controls, e.g. the originator's report);
   views:  each bank monitors its own books; node (account, bank) is the account as bank sees it, and an interbank
           transfer appears in both witnesses' views. A transfer is flagged if either witness flags it.
+  union:  the pooled graph of global, but a transfer stays if any witness records it: the union-of-books baseline
+          (a monitor that receives both banks' books in clear; scored with the global model).
 
 Port numbering is computed exactly as in the reference implementation (data_util.ports) but vectorised, so the graph
 can be rebuilt after every deletion or restoration.
@@ -156,11 +158,13 @@ def build(rec: Records, setting: str, seed_tx: np.ndarray) -> Graph:
     """The graph a monitor sees given the surviving records; seeds are the edges of the transfers in seed_tx."""
     from torch_geometric.data import HeteroData
     e = edges()
-    if setting == "global":
-        # a transfer survives only if every witness still records it
+    if setting in ("global", "union"):
+        # global: a transfer survives only if every witness still records it; union: if any witness does (a pooled
+        # monitor that reads the books of both banks)
         tx, cnt = np.unique(rec.tx, return_counts=True)
-        need = np.where((e.payer.to_numpy() != e.payee.to_numpy())[tx], 2, 1)
-        tx = tx[cnt == need]
+        if setting == "global":
+            need = np.where((e.payer.to_numpy() != e.payee.to_numpy())[tx], 2, 1)
+            tx = tx[cnt == need]
         g_rec = Records(tx, -np.ones(len(tx), np.int64))
         src, dst = e.src.to_numpy()[tx], e.dst.to_numpy()[tx]
         n_nodes = int(max(e.src.max(), e.dst.max())) + 1

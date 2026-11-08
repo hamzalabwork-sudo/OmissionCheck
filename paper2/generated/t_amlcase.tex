@@ -1,0 +1,10 @@
+\begin{table*}[!htbp]\centering\small\setlength{\tabcolsep}{4pt}
+\caption{Case study: insiders at the 20 banks with the most test-period laundering records delete those records. F1 (flagged above probability 0.5) and PR-AUC in \%, mean $\pm$ standard deviation over $n$ training seeds. Union: a pooled monitor that reads both witnesses' books (pooled only). Restore: the records the protocol decodes are put back. A deleted transfer missing from the monitor's books counts as a false negative. Every scenario, the hardened monitors, the visible-set metrics, F1 at the validation-optimal threshold and the gap to the published F1 are in the supplementary material.}\label{tab:amlcase}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{llrrrrrrrr}\toprule
+ & & & \multicolumn{4}{c}{F1} & \multicolumn{3}{c}{PR-AUC} \\\cmidrule(lr){4-7}\cmidrule(lr){8-10}
+Detector & Monitor & $n$ & Clean & Attacked & Union & Restore & Clean & Attacked & Restore \\\midrule
+Multi-GIN+EU & Pooled monitor & 5 & 58.0\,$\pm$\,3.6 & 38.2\,$\pm$\,3.1 & 54.9\,$\pm$\,3.8 & 52.9\,$\pm$\,3.6 & 63.5\,$\pm$\,2.0 & 33.9\,$\pm$\,1.4 & 55.1\,$\pm$\,1.8 \\
+Multi-GIN+EU & Per-bank monitors & 5 & 61.6\,$\pm$\,1.6 & 50.9\,$\pm$\,1.7 & -- & 57.7\,$\pm$\,1.8 & 64.1\,$\pm$\,3.3 & 49.3\,$\pm$\,1.4 & 57.6\,$\pm$\,3.2 \\
+Multi-PNA+EU & Pooled monitor & 3 & 66.2\,$\pm$\,4.4 & 43.3\,$\pm$\,3.2 & 62.3\,$\pm$\,4.3 & 60.4\,$\pm$\,4.3 & 66.5\,$\pm$\,2.3 & 34.9\,$\pm$\,0.7 & 57.6\,$\pm$\,1.9 \\
+Multi-PNA+EU & Per-bank monitors & 3 & 68.3\,$\pm$\,3.4 & 57.1\,$\pm$\,2.8 & -- & 63.9\,$\pm$\,2.9 & 72.6\,$\pm$\,1.2 & 57.2\,$\pm$\,0.9 & 65.4\,$\pm$\,1.1 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

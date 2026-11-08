@@ -1,0 +1,10 @@
+\begin{table*}[!htbp]\centering\small
+\caption{Cost per hourly epoch at consortium size $N$. Entries: mean covered entries per bank and epoch. $|D^e|$: 99th-percentile benign residual (canonical canon, $\mu=5$, $\delta=15$\,min); $m$ is sized to $1.5\,|D^e|$. Gas per epoch for all banks, from the measured gas of each phase on the ledgers (book commitment, sketch commitment and, in publish mode, the reveal repriced under EIP-7623), scaled with $m$. Growth: publish-mode calldata per year. Fees per year at mainnet-equivalent prices (5\,gwei, \$3{,}000 per ether); on a fee-free permissioned ledger the cost is block space only.}\label{tab:scale}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{rrrrrrrrrr}\toprule
+ & & & & Sketch & \multicolumn{2}{c}{Gas/epoch ($10^6$)} & Growth & \multicolumn{2}{c}{Fee per year} \\\cmidrule(lr){6-7}\cmidrule(lr){9-10}
+$N$ & Entries & $|D^e|$ & $m$ & (KB) & Publish & Commit & (GB/yr) & Publish & Commit \\\midrule
+16 & 41 & 5 & 9 & 0.6 & 2.5 & 1.86 & 0.1 & \$0.33M & \$0.24M \\
+100 & 39 & 21 & 33 & 2.1 & 21.2 & 11.51 & 1.7 & \$2.79M & \$1.51M \\
+500 & 27 & 70 & 108 & 6.8 & 193.2 & 57.45 & 28.2 & \$25.38M & \$7.55M \\
+1{,}000 & 19 & 97 & 147 & 9.2 & 476.8 & 114.84 & 76.8 & \$62.66M & \$15.09M \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

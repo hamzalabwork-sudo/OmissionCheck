@@ -237,6 +237,7 @@ class BlockWatcher(threading.Thread):
 class EvmBackend(Backend):
     kind = "blockchain"
     STALL_S = 180.0
+    GAS_PER_MEMBER = 26_000
     observe_blocks, observe_s = 0, 90.0   # set per trial
 
     def await_idle(self, seconds: float, timeout_s: float = 1800.0) -> float:
@@ -274,7 +275,12 @@ class EvmBackend(Backend):
         txh = self.rpc.call("eth_sendRawTransaction", ["0x" + raw.hex().removeprefix("0x")])
         end = time.time() + timeout
         while time.time() < end:
-            rc = self.rpc.call("eth_getTransactionReceipt", [txh])
+            try:
+                rc = self.rpc.call("eth_getTransactionReceipt", [txh])
+            except RpcError as e:              # Geth on a fresh chain: "transaction indexing is in progress"
+                if "indexing" not in str(e):
+                    raise
+                rc = None
             if rc:
                 if int(rc["status"], 16) != 1:
                     raise RpcError(f"transaction {txh} reverted")
@@ -330,30 +336,35 @@ class EvmBackend(Backend):
         return int(out, 16) == 1
 
     def _calldata(self, item: Item) -> str:
-        if item.members:
-            return self.contract.encodeABI(fn_name="recordBatch", args=[
-                item.record_id, item.evidence_hash, len(item.members), item.meta_hash, item.level, item.approval])
+        if item.members:     # batch_ids "log": IDs only logged (uniqueness checked by the auditor, not enforced)
+            fn = "recordBatchLogged" if getattr(self, "batch_ids", "store") == "log" else "recordBatch"
+            return self.contract.encodeABI(fn_name=fn, args=[
+                item.record_id, item.evidence_hash, [m.record_id for m in item.members], item.meta_hash, item.level,
+                item.approval])
         return self.contract.encodeABI(fn_name="recordEvidence", args=[
             item.record_id, item.evidence_hash, item.meta_hash, item.level, item.approval])
 
     def calibrate_gas(self, item: Item, submitter, approver) -> int:
-        item.approval = sign_approval(approver, self.chain.chain_id, self.contract.address, item)
+        item.approval = sign_approval(approver, self.chain.chain_id, self.contract.address, item, submitter.address)
         data = self._calldata(item)
         est = int(self.rpc.call("eth_estimateGas", [{"from": submitter.address, "to": self.contract.address,
                                                      "data": data}]), 16)
         self.gas_limit = int(est * 1.25)
+        self._cal_members = len(item.members)
         return est
 
     # ---------------------------------------------------------------- workload
     def prepare(self, item: Item, submitter, approver) -> None:
         t0 = time.perf_counter()
-        item.approval = sign_approval(approver, self.chain.chain_id, self.contract.address, item)
+        item.approval = sign_approval(approver, self.chain.chain_id, self.contract.address, item, submitter.address)
         t1 = time.perf_counter()
         data = self._calldata(item)
         nonce = self.nonces[submitter.address]
         self.nonces[submitter.address] = nonce + 1
+        # a batch marks every record ID as committed: one new storage slot (+ calldata) per member
+        gas = self.gas_limit + self.GAS_PER_MEMBER * max(0, len(item.members) - getattr(self, "_cal_members", 0))
         raw = submitter.sign_transaction({
-            "to": self.contract.address, "data": data, "gas": self.gas_limit, "gasPrice": self.gas_price,
+            "to": self.contract.address, "data": data, "gas": gas, "gasPrice": self.gas_price,
             "nonce": nonce, "chainId": self.chain.chain_id, "value": 0}).rawTransaction
         t2 = time.perf_counter()
         item.payload = "0x" + bytes(raw).hex()
@@ -387,6 +398,39 @@ class EvmBackend(Backend):
                 time.sleep(0.2 * (attempt + 1))
         item.t_ack = time.perf_counter()
         item.status = "failed"
+
+    def resend(self, item: Item, worker: int) -> None:
+        """Rebroadcast a submission that has not been included (same signed transaction and nonce)."""
+        try:
+            self.rpc.raw({"jsonrpc": "2.0", "id": 1, "method": "eth_sendRawTransaction", "params": [item.payload]},
+                         key=worker)
+        except requests.RequestException:
+            pass
+
+    def head(self) -> int | None:
+        return self.watcher.head if self.watcher else None
+
+    def drive_tail(self, last_block: int, k: int, timeout_s: float = 120.0) -> dict:
+        """Client-side tail: send no-op transactions (zero-value self-transfers, one at a time) until the chain has
+        sealed k blocks on top of `last_block`, so that the last record reaches k confirmations even on a ledger that
+        stops sealing when idle. Returns the number of no-op transactions and the time taken."""
+        acct = self.submitters[0]
+        sent, t0 = 0, time.perf_counter()
+        while self.watcher.head < last_block + k and time.perf_counter() - t0 < timeout_s:
+            nonce = self.nonces[acct.address]
+            raw = acct.sign_transaction({"to": acct.address, "value": 0, "gas": 21_000, "gasPrice": self.gas_price,
+                                         "nonce": nonce, "chainId": self.chain.chain_id}).rawTransaction
+            txh = "0x" + keccak(bytes(raw)).hex()
+            out = self.rpc.raw({"jsonrpc": "2.0", "id": 1, "method": "eth_sendRawTransaction",
+                                "params": ["0x" + bytes(raw).hex()]}, key="watcher")
+            if "error" in out and "already known" not in str(out["error"]):
+                break
+            self.nonces[acct.address] = nonce + 1
+            sent += 1
+            end = time.perf_counter() + 30
+            while txh.lower() not in self.watcher.seen and time.perf_counter() < end:
+                time.sleep(0.05)
+        return {"tail_txs": sent, "tail_s": time.perf_counter() - t0}
 
     def _receipts(self, items: list[Item]) -> list:
         out = []
@@ -432,6 +476,7 @@ class EvmBackend(Backend):
         done = [it for it in items if it.block >= 0]
         if not done:
             return
+        self.tail = self.drive_tail(max(it.block for it in done), self.tail_k) if self.tail_k else {}
         top = max(it.block for it in done) + max(max(CONFIRMATION_DEPTHS), self.observe_blocks)
         end = time.perf_counter() + self.observe_s
         while self.watcher.head < top and time.perf_counter() < end:
@@ -522,6 +567,11 @@ class EvmBackend(Backend):
         return {"merkle_root": bytes(r[0]), "meta_hash": bytes(r[1]), "submitter": to_checksum_address(r[2]),
                 "approver": to_checksum_address(r[3]), "timestamp": r[4], "block": r[5], "count": r[6], "level": r[7]}
 
+    def committed_in(self, record_id: bytes) -> bytes:
+        """The batch in which the registry recorded this record ID (zero bytes: none)."""
+        data = self.contract.encodeABI(fn_name="committedIn", args=[record_id])
+        return bytes.fromhex(self.rpc.call("eth_call", [{"to": self.contract.address, "data": data}, "latest"])[2:])
+
     def fetch_record(self, record_id: bytes) -> dict | None:
         data = self.contract.encodeABI(fn_name="getRecord", args=[record_id])
         out = self.rpc.call("eth_call", [{"to": self.contract.address, "data": data}, "latest"])
@@ -548,4 +598,5 @@ class EvmBackend(Backend):
 
     def extra_metrics(self, items: list[Item]) -> dict:
         return {"rpc_calls": self.rpc.calls, "rpc_bytes_out": self.rpc.bytes_out, "rpc_bytes_in": self.rpc.bytes_in,
-                "connections_opened_during_run": getattr(self, "connections_during_run", None)}
+                "connections_opened_during_run": getattr(self, "connections_during_run", None),
+                **getattr(self, "tail", {})}

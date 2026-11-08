@@ -1,14 +1,30 @@
 {
  "backend": "purechain",
  "chain_id": 900520900520,
- "contract": "0x7c977337a9a4399a82BaeADa038081147f99e81F",
+ "contract": "0xC9137F5749742EB65c059A7103ee38Ab297Adc55",
  "mode": "publish",
  "m": 192,
  "banks": 16,
+ "epochs": 3,
  "omit_k": 5,
  "fab_k": 2,
  "seed": 1,
+ "dropout": false,
+ "window": 30,
+ "confirm_depth": 8,
+ "finalized": false,
+ "phase_s": {
+  "books": 4.603498697280884,
+  "seed_settle": 8.418282270431519,
+  "seed": 8.469279527664185,
+  "sketch": 3.881568431854248,
+  "reveal": 4.6342549324035645,
+  "dropout": 0.0,
+  "final_settle": 8.151571989059448,
+  "total": 30.41976571083069
+ },
+ "gas_price_wei": 0,
  "mainnet_gas_gwei": 5.0,
  "eth_usd": 3000.0,
- "client": "PureChain/PureChain-Idle-Hub/v1.13.15-purechain-1.0.1-e797061c-20261013/linux-amd64/go1.21.12"
+ "client": "PureChain/PureChain-Idle-2/v1.13.15-purechain-1.0.1-e797061c-20261013/linux-amd64/go1.21.12"
 }

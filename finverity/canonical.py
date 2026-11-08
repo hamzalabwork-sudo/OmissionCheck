@@ -7,6 +7,11 @@ Implements the RFC 8785 (JSON Canonicalization Scheme) profile used by FinVerity
   * strings normalized to Unicode NFC before serialization,
   * floating-point numbers are rejected: monetary amounts must be decimal strings,
     which removes the float-formatting ambiguity that RFC 8785 otherwise has to specify.
+
+Evidence arriving as JSON text is parsed with `parse`, which accepts only I-JSON (RFC 7493): duplicate member
+names, NaN/Infinity and lone surrogates are rejected, so the hashed object is exactly the object an auditor reads.
+Value formats (two-decimal amount strings, UTC timestamps ending in Z) are fixed by the evidence schema, so two
+spellings of the same value are rejected at entry rather than hashed differently.
 """
 from __future__ import annotations
 
@@ -41,6 +46,41 @@ def _normalize(value: Any, path: str = "$") -> Any:
     if isinstance(value, float):
         raise CanonicalizationError(f"{path}: floats are not allowed; use decimal strings")
     raise CanonicalizationError(f"{path}: unsupported type {type(value).__name__}")
+
+
+def _no_duplicates(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise CanonicalizationError(f"duplicate member name(s): {sorted({k for k in keys if keys.count(k) > 1})}")
+    return dict(pairs)
+
+
+def _reject_constant(name: str):
+    raise CanonicalizationError(f"non-I-JSON number {name}")
+
+
+def parse(text: str | bytes) -> Any:
+    """Parse JSON text as I-JSON (RFC 7493) or raise CanonicalizationError."""
+    if isinstance(text, bytes):
+        text = text.decode("utf-8")
+    obj = json.loads(text, object_pairs_hook=_no_duplicates, parse_constant=_reject_constant)
+    _check_strings(obj)
+    return obj
+
+
+def _check_strings(v: Any) -> None:
+    if isinstance(v, str):
+        try:
+            v.encode("utf-8")
+        except UnicodeEncodeError:
+            raise CanonicalizationError("lone surrogate in string") from None
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            _check_strings(k)
+            _check_strings(x)
+    elif isinstance(v, list):
+        for x in v:
+            _check_strings(x)
 
 
 def canonicalize(obj: Any) -> bytes:

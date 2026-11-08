@@ -1,0 +1,8 @@
+\begin{table}[!htbp]\centering\small
+\caption{Adaptive attacks and dropouts on IBM AML HI-Small ($N=1{,}000$, $m=192$, $\lambda=16$) under the naive design (fixed public hash functions, 64-bit check, publication in any order) and the protocol (books committed before the epoch seed, 128-bit check, commit-then-reveal, mask recovery).}\label{tab:attacks}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{L{0.30\linewidth}L{0.22\linewidth}L{0.36\linewidth}}\toprule
+Attack & Naive design & Protocol \\\midrule
+Decoy cancellation (one insider) & hidden: sum $=0$ & flagged in 100.0\%, decoded after $\le$2 re-publications \\
+Last-mover cancellation & flagged in 0\% & flagged in 100\%, exact in 100\% \\
+Dropout of 1--3 banks & epoch undecodable & sum recovered exactly in 100\% \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table}

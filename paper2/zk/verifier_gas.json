@@ -1,0 +1,24 @@
+[
+ {
+  "backend": "poa2_local",
+  "n_public": 5,
+  "deploy_gas": 607513,
+  "check_tx_gas": 269499,
+  "verify_exec_gas": 219063,
+  "check_calldata_bytes": 420,
+  "post_tx_gas": 29266,
+  "post_calldata_bytes": 292,
+  "pairing_returned": 0
+ },
+ {
+  "backend": "poa2_local",
+  "n_public": 21,
+  "deploy_gas": 1070137,
+  "check_tx_gas": 388737,
+  "verify_exec_gas": 330153,
+  "check_calldata_bytes": 932,
+  "post_tx_gas": 29266,
+  "post_calldata_bytes": 292,
+  "pairing_returned": 0
+ }
+]

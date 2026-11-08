@@ -1,0 +1,22 @@
+\begin{table*}[!htbp]\centering\small\setlength{\tabcolsep}{4pt}
+\caption{Insider deletion and the Multi-PNA+EU monitor (standard training; mean $\pm$ standard deviation over 3--3 seeds, \%). Columns as in \cref{tab:aml}.}\label{tab:amlpna}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{lrrrrrrr}\toprule
+ & \multicolumn{2}{c}{Deleted} & \multicolumn{2}{c}{No defence} & Union & \multicolumn{2}{c}{Restore} \\\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){7-8}
+Attack & $n$ & share & F1 & PR-AUC & F1 & F1 & PR-AUC \\\midrule
+\multicolumn{8}{l}{\emph{Pooled monitor}} \\
+No attack & 0 & -- & 66.2\,$\pm$\,4.4 & 66.5\,$\pm$\,2.3 & -- & -- & -- \\
+Insiders at 1 bank & 110 & 7\% & 66.2\,$\pm$\,4.3 & 66.5\,$\pm$\,2.2 & 66.2\,$\pm$\,4.3 & 66.1\,$\pm$\,4.3 & 66.6\,$\pm$\,2.2 \\
+Insiders at 5 banks & 285 & 18\% & 60.4\,$\pm$\,4.1 & 57.4\,$\pm$\,1.9 & 65.4\,$\pm$\,4.4 & 65.2\,$\pm$\,4.4 & 65.0\,$\pm$\,2.2 \\
+Insiders at 10 banks & 446 & 28\% & 54.3\,$\pm$\,4.0 & 48.8\,$\pm$\,1.6 & 64.0\,$\pm$\,4.4 & 63.3\,$\pm$\,4.4 & 62.0\,$\pm$\,2.1 \\
+Insiders at 20 banks & 676 & 42\% & 43.3\,$\pm$\,3.2 & 34.9\,$\pm$\,0.7 & 62.3\,$\pm$\,4.3 & 60.4\,$\pm$\,4.3 & 57.6\,$\pm$\,1.9 \\
+Aware, 5 banks, $\beta=0.5$ & 141 & 9\% & 60.7\,$\pm$\,4.0 & 58.2\,$\pm$\,1.9 & 65.5\,$\pm$\,4.3 & 65.4\,$\pm$\,4.3 & 65.2\,$\pm$\,2.3 \\
+Random, 5 banks, $\beta=0.5$ & 147 & 9\% & 63.3\,$\pm$\,4.4 & 62.0\,$\pm$\,2.1 & 65.8\,$\pm$\,4.4 & 65.8\,$\pm$\,4.3 & 65.8\,$\pm$\,2.3 \\
+\multicolumn{8}{l}{\emph{Per-bank monitors}} \\
+No attack & 0 & -- & 68.3\,$\pm$\,3.4 & 72.6\,$\pm$\,1.2 & -- & -- & -- \\
+Insiders at 1 bank & 110 & 7\% & 68.4\,$\pm$\,3.3 & 72.6\,$\pm$\,1.2 & -- & 68.3\,$\pm$\,3.3 & 72.6\,$\pm$\,1.2 \\
+Insiders at 5 banks & 285 & 18\% & 66.0\,$\pm$\,3.2 & 69.1\,$\pm$\,1.1 & -- & 67.7\,$\pm$\,3.2 & 71.4\,$\pm$\,1.2 \\
+Insiders at 10 banks & 446 & 28\% & 64.1\,$\pm$\,3.0 & 66.0\,$\pm$\,1.0 & -- & 66.3\,$\pm$\,3.2 & 69.1\,$\pm$\,1.1 \\
+Insiders at 20 banks & 676 & 42\% & 57.1\,$\pm$\,2.8 & 57.2\,$\pm$\,0.9 & -- & 63.9\,$\pm$\,2.9 & 65.4\,$\pm$\,1.1 \\
+Aware, 5 banks, $\beta=0.5$ & 140 & 9\% & 66.1\,$\pm$\,3.1 & 69.3\,$\pm$\,1.2 & -- & 67.9\,$\pm$\,3.2 & 71.6\,$\pm$\,1.1 \\
+Random, 5 banks, $\beta=0.5$ & 147 & 9\% & 67.2\,$\pm$\,3.2 & 70.9\,$\pm$\,1.2 & -- & 68.2\,$\pm$\,3.3 & 72.2\,$\pm$\,1.2 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

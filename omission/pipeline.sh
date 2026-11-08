@@ -11,11 +11,11 @@ for pass in 1 2 3 4 5 6 7 8; do
   for job in "$@"; do
     read -r setting model variant seed <<< "$job"
     name="${setting}_${model}_${variant}_s${seed}"
-    [ -f "results/paper2/aml/x8_${name}.csv" ] && continue
+    [ -f "results/paper2/aml/x8b_${name}.csv" ] && continue
     left=1
     omission/queue.sh train "$gpu" "$epochs" "$job"
     omission/queue.sh attack "$gpu" "$epochs" "$job"
-    [ -f "results/paper2/aml/x8_${name}.csv" ] || sleep 120   # killed: let memory recover
+    [ -f "results/paper2/aml/x8b_${name}.csv" ] || sleep 120   # killed: let memory recover
   done
   [ "$left" = 0 ] && break
 done

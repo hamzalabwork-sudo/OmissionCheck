@@ -1,0 +1,9 @@
+\begin{table}[!htbp]\centering\small
+\caption{Phase timing per ledger (medians over runs). Read rule: the block at which the seed block and the sum are read. Seed wait: from the last book commitment until the seed block is settled. Final wait: from the last transaction until it is settled. Run: wall time of a run of all its epochs, whose phases run together.}\label{tab:ledgers}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{llrrrrr}\toprule
+Ledger & Read rule & Latency (s) & Seed wait (s) & Final wait (s) & Run (s) & Epochs \\\midrule
+Besu QBFT & head (instant finality) & 3.7 & 1 & 0 & 51 & 10 \\
+Clique & 8 deep & 2.2 & 9 & 8 & 60 & 10 \\
+PoS devnet & finalized & 10.9 & 1117 & 1140 & 2664 & 3 \\
+PureChain & 8 deep & 2.2 & 9 & 8 & 33 & 3 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table}

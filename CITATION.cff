@@ -1,18 +1,19 @@
 cff-version: 1.2.0
 message: "If you use this software or its results, please cite it as below."
-title: "OmissionCheck: omission-evident interbank audit evidence through counterparty co-commitment on blockchains"
+title: "OmissionCheck: making omissions in interbank books evident on a blockchain without disclosing the books"
 authors:
   - family-names: Ibrahim
     given-names: Hamza
 repository-code: "https://github.com/hamzalabwork-sudo/OmissionCheck"
 license: MIT
-version: 1.0.0
-date-released: 2026-11-05
+version: 1.1.0
+date-released: 2026-11-08
 keywords:
+  - blockchain
   - audit evidence
   - completeness assertion
   - interbank payments
   - anti-money laundering
-  - blockchain
   - invertible Bloom lookup table
   - secure aggregation
+  - zero-knowledge proofs

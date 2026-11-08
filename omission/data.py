@@ -3,7 +3,8 @@
 Every transfer between two consortium banks has two independent witnesses, the payer bank and the payee bank. Each
 witness derives the same 256-bit key for it: word 0 packs the payer and payee bank identifiers, words 1-3 carry a
 192-bit tag, a keyed BLAKE2b MAC of the canonical transfer under the pair's shared key. The shared key stands in for
-the X25519 agreement of the deployed protocol (bench.py times the real primitive).
+the X25519 agreement of the deployed protocol (bench.py times the real primitive). Independent sub-keys are derived
+from it per purpose (MAC, masks), so the tag key never keys a mask stream.
 """
 from __future__ import annotations
 
@@ -36,12 +37,16 @@ def usd_rates(df: pd.DataFrame) -> dict[str, float]:
     return out
 
 
+COLUMNS = ["minute", "epoch", "payer", "payee", "amount", "usd", "laundering", "format"]
+
+
 @lru_cache(maxsize=1)
 def transfers() -> pd.DataFrame:
-    """All 5.08M transfers with an epoch index, a laundering flag, the US-dollar value and a duplicate rank (rows that
-    are otherwise equal)."""
+    """All 5.08M transfers with an epoch index, a laundering flag and the US-dollar value. The canonical strings
+    (canon(), with a duplicate rank for rows that are otherwise equal) are cached on disk but loaded only to derive
+    tags: they take GBs in memory."""
     if CACHE.exists():
-        return pd.read_parquet(CACHE)
+        return pd.read_parquet(CACHE, columns=COLUMNS)
     df = pd.read_csv(RAW, dtype={"Account": str, "Account.1": str})
     rates = usd_rates(df)
     df["usd"] = df["Amount Paid"] * df["Payment Currency"].map(rates)
@@ -61,7 +66,13 @@ def transfers() -> pd.DataFrame:
     out = out.rename(columns={"Payment Format": "format"}).reset_index(drop=True)
     CACHE.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(CACHE, index=False)
-    return out
+    return out[COLUMNS]
+
+
+def canon(rows: np.ndarray) -> list[str]:
+    """Canonical strings of the given transfers (row indices of transfers())."""
+    transfers()
+    return pd.read_parquet(CACHE, columns=["canon"])["canon"].to_numpy()[rows].tolist()
 
 
 def ranking() -> pd.Index:
@@ -86,6 +97,11 @@ def pair_key(a: int, b: int) -> bytes:
     return hashlib.blake2b(f"{lo}-{hi}".encode(), key=MASTER, digest_size=32).digest()
 
 
+def subkey(k: bytes, label: str) -> bytes:
+    """Purpose-bound sub-key of a pair key (HKDF-Expand with a label in the deployed protocol)."""
+    return hashlib.blake2b(label.encode(), key=k, digest_size=32).digest()
+
+
 def tag_keys(payer: np.ndarray, payee: np.ndarray, canon: list[str]) -> np.ndarray:
     """(n, 4) uint64 keys: [payer<<32 | payee, 192-bit MAC of the canonical transfer under the pair key]."""
     keys = np.empty((len(canon), 4), dtype=np.uint64)
@@ -95,7 +111,7 @@ def tag_keys(payer: np.ndarray, payee: np.ndarray, canon: list[str]) -> np.ndarr
     for i, (a, b, c) in enumerate(zip(payer.tolist(), payee.tolist(), canon)):
         k = pk.get((a, b))
         if k is None:
-            k = pk[(a, b)] = pair_key(a, b)
+            k = pk[(a, b)] = subkey(pair_key(a, b), "mac")
         buf[24 * i:24 * i + 24] = hashlib.blake2b(c.encode(), key=k, digest_size=24).digest()
     keys[:, 1:] = np.frombuffer(bytes(buf), dtype=np.uint64).reshape(-1, 3)
     return keys
@@ -105,13 +121,14 @@ def covered_keys(n_members: int | None) -> tuple[pd.DataFrame, np.ndarray]:
     """Covered transfers of a consortium and their keys (cached per consortium size)."""
     t = transfers()
     mem = members(n_members)
-    sel = t[covered(t, mem)].reset_index(drop=True)
-    path = DATA_PROCESSED / f"ibm_keys_N{n_members or 'all'}.npy"
+    cov = covered(t, mem)
+    sel = t[cov].reset_index(drop=True)
+    path = DATA_PROCESSED / f"ibm_keys_v2_N{n_members or 'all'}.npy"
     if path.exists():
         keys = np.load(path)
         if len(keys) == len(sel):
             return sel, keys
-    keys = tag_keys(sel["payer"].to_numpy(), sel["payee"].to_numpy(), sel["canon"].tolist())
+    keys = tag_keys(sel["payer"].to_numpy(), sel["payee"].to_numpy(), canon(np.flatnonzero(cov)))
     np.save(path, keys)
     return sel, keys
 

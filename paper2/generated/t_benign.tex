@@ -1,0 +1,20 @@
+\begin{table*}[!htbp]\centering\small
+\caption{Benign discrepancies over all covered transfers of the 1,000-bank consortium. Naive canon: each witness tags the amount it booked and files the transfer under its own booking hour; returns are reversed by the payer. Canonical: $\mathrm{canon}(x)$ holds the end-to-end reference, the settlement amount and currency and the value date, and an epoch is closed $\delta$ minutes after its end; a payee booking later than that leaves a one-sided record. Payee booking lag is exponential with mean $\mu$; deductions reach the credited amount of 80.0\% of wires; 0.1\% of transfers are returned (assumed rates). Decoded: epochs whose sum peels completely at $m=192$. Precision: share of decoded discrepancies that are an insider's deletions when the bank with the most laundering legs also deletes them ($\mu=5$ only).}\label{tab:benign}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{lrrrrrrrr}\toprule
+Canon & $\mu$ (min) & $\delta$ (min) & False rate & Mean $|D^e|$ & p99 $|D^e|$ & Flagged & Decoded & Precision \\\midrule
+Naive & 1 & -- & 4.139\% & 787.8 & 2{,}112 & 67\% & -- & -- \\
+Naive & 5 & -- & 10.201\% & 1{,}935.4 & 5{,}069 & 80\% & -- & -- \\
+Naive & 30 & -- & 43.546\% & 8{,}207.2 & 21{,}047 & 93\% & -- & -- \\
+Canonical & 5 & 0 & 7.201\% & 693.6 & 1{,}789 & 73\% & 37\% & 0.0\% \\
+Canonical & 5 & 5 & 2.651\% & 255.3 & 656 & 69\% & 37\% & 0.4\% \\
+Canonical & 5 & 15 & 0.359\% & 34.6 & 97 & 64\% & 100\% & 4.1\% \\
+Canonical & 5 & 30 & 0.019\% & 1.8 & 8 & 56\% & 100\% & 45.2\% \\
+Canonical & 5 & 60 & 0.000\% & 0.0 & 0 & 1\% & 100\% & 99.6\% \\
+Canonical & 5 & 120 & 0.000\% & 0.0 & 0 & 0\% & 100\% & 100.0\% \\
+Canonical & 30 & 0 & 41.677\% & 4{,}014.2 & 10{,}144 & 88\% & 37\% & -- \\
+Canonical & 30 & 5 & 35.287\% & 3{,}398.8 & 8{,}627 & 87\% & 37\% & -- \\
+Canonical & 30 & 15 & 25.270\% & 2{,}434.0 & 6{,}162 & 83\% & 37\% & -- \\
+Canonical & 30 & 30 & 15.307\% & 1{,}474.3 & 3{,}746 & 79\% & 37\% & -- \\
+Canonical & 30 & 60 & 5.633\% & 542.5 & 1{,}395 & 71\% & 37\% & -- \\
+Canonical & 30 & 120 & 0.760\% & 73.2 & 199 & 65\% & 86\% & -- \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

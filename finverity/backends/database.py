@@ -75,7 +75,7 @@ class DatabaseBackend(Backend):
 
     def prepare(self, item: Item, submitter, approver) -> None:
         t0 = time.perf_counter()
-        item.approval = sign_approval(approver, 0, _ZERO, item)
+        item.approval = sign_approval(approver, 0, _ZERO, item, submitter.address)
         item.prep["approval_sign_s"] = time.perf_counter() - t0
         item.prep["tx_build_sign_s"] = 0.0
         item.payload = submitter.address
@@ -86,7 +86,8 @@ class DatabaseBackend(Backend):
         try:
             if item.payload not in self.submitters:
                 raise PermissionError("not a submitter")
-            inner = approval_digest(0, _ZERO, item.record_id, item.evidence_hash, item.meta_hash, item.level)
+            inner = approval_digest(0, _ZERO, item.payload, item.record_id, item.evidence_hash, item.meta_hash, item.level,
+                                    len(item.members))
             approver = Account.recover_message(encode_defunct(primitive=inner), signature=item.approval)
             if approver not in self.approvers:
                 raise PermissionError("invalid approval")

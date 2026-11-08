@@ -1,14 +1,14 @@
-\begin{table}[!htbp]\centering\small
-\caption{Detection on IBM AML HI-Small, consortium of the 1{,}000 busiest banks, 3{,}679{,}353 covered transfers in hourly epochs, sketches of $m=192$ cells. Integrity-only anchoring commits each bank's own books and cannot see what was never written. Per-pair totals compare the count and amount each side reports per ordered bank pair and epoch. Epoch detection is the share of tampered epochs whose aggregate is non-zero; item recall is the share of non-cancelling keys that peeling returns with the correct sign; false epochs are untampered epochs flagged.}\label{tab:detection}
-\begin{tabular}{lrrrrrr}\toprule
- & Tampered & Integrity & Per-pair & \multicolumn{3}{c}{This protocol} \\\cmidrule(lr){5-7}
-Scenario & transfers & only & totals & Epochs & Items & False \\\midrule
-No tampering & 0 & 0\% & -- & -- & -- & 0 \\
-Random omission, $p=10^{-4}$ & 714 & 0\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
-Random omission, $p=10^{-3}$ & 7{,}351 & 0\% & 99.9\% & 100.0\% & 100.0\% & 0 \\
-Random omission, $p=10^{-2}$ & 73{,}352 & 0\% & 99.5\% & 100.0\% & 13.2\% & 0 \\
-Insider deletes laundering legs & 1{,}023 & 0\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
-Substitution (same amount) & 1{,}200 & 0\% & 0.0\% & 100.0\% & 100.0\% & 0 \\
-Alteration ($-1\%$ amount) & 1{,}200 & 0\% & 97.4\% & 100.0\% & 100.0\% & 0 \\
-Two colluding banks & 47 & 0\% & 0.0\% & 0.0\% & -- & 0 \\
-\bottomrule\end{tabular}\end{table}
+\begin{table*}[!htbp]\centering\small
+\caption{Detection on IBM AML HI-Small (publish or accumulate mode; the sum is the same in every mode): consortium of the 1{,}000 busiest banks, 3{,}679{,}353 covered transfers in hourly epochs, sketches of $m=192$ cells, a fresh seed per epoch. Per-pair totals compare the count and amount each side reports per ordered bank pair and epoch (detection of tampered transfers). Flagged: tampered epochs whose sum is non-zero. Decoded: tampered epochs whose sum peels completely. Items: non-cancelling keys returned with the correct sign. False: untampered epochs flagged. Integrity-only anchoring detects none of these attacks by construction and is not shown; -- marks an undefined rate.}\label{tab:detection}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{lrrrrrr}\toprule
+ & Tampered & Per-pair & \multicolumn{4}{c}{This protocol} \\\cmidrule(lr){4-7}
+Scenario & transfers & totals & Flagged & Decoded & Items & False \\\midrule
+No tampering & 0 & -- & -- & 100.0\% & -- & 0 \\
+Random omission, $p=10^{-4}$ & 714 & 100.0\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
+Random omission, $p=10^{-3}$ & 7{,}351 & 99.9\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
+Random omission, $p=10^{-2}$ & 73{,}352 & 99.5\% & 100.0\% & 52.4\% & 13.0\% & 0 \\
+Insider deletes laundering legs & 1{,}023 & 100.0\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
+Substitution (same amount) & 1{,}200 & 0.0\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
+Alteration ($-1\%$ amount) & 1{,}200 & 97.4\% & 100.0\% & 100.0\% & 100.0\% & 0 \\
+Two colluding banks & 47 & 0.0\% & 0.0\% & 100.0\% & -- & 0 \\
+\bottomrule\end{tabular}\end{adjustbox}\end{table*}

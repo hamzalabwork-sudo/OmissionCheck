@@ -9,8 +9,9 @@ def _names(prefix: str, all_: bool = True) -> list[str]:
     return subprocess.run(args, capture_output=True, text=True).stdout.split()
 
 
-GROUPS = {"besu": "besu-validator", "ethpos": "ethpos-", "db_postgres": "finverity-postgres", "poa2_local": "poa2-signer"}
-RECREATE = {"ethpos", "poa2_local"}   # removed, not paused: always started fresh
+GROUPS = {"besu": "besu-validator", "ethpos": "ethpos-", "db_postgres": "finverity-postgres", "poa2_local": "poa2-signer",
+          "purechain_local": "pcl-signer"}
+RECREATE = {"ethpos", "poa2_local", "purechain_local"}   # removed, not paused: always started fresh
 
 
 def isolate(active: str) -> None:
